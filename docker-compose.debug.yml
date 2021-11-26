@@ -1,0 +1,55 @@
+version: '3.4'
+
+services:
+  webapp:
+    build: .
+    # command: ["sh", "-c", "pip install debugpy -t /tmp && python /tmp/debugpy --wait-for-client --listen 0.0.0.0:5678 -m flask run --no-debugger --no-reload --host 0.0.0.0 --port 5000"]
+    command: ["sh", "-c", "flask run --host 0.0.0.0 --port 5000"]
+    ports:
+      - 5000:5000
+      - 5678:5678
+    volumes:
+      - .:/usr/src/app
+    environment:
+      - LINDEP_SETTINGS=config.py
+      - FLASK_APP=server.application
+      - FLASK_ENV=development
+      - POSTGRES_CONN_STRING=host=db dbname=lindep user=postgres password=Rovei%Z3
+      - CELERY_BROKER_URL=amqp://user:PwWYF9dq@rabbitmq:5672//
+    depends_on:
+      - rabbitmq
+      - db
+
+  worker:
+    build: .
+    command: celery --app=server.application.celapp worker -l INFO
+    volumes:
+      - .:/usr/src/app
+    environment:
+      - POSTGRES_CONN_STRING=host=db dbname=lindep user=postgres password=Rovei%Z3
+      - CELERY_BROKER_URL=amqp://user:PwWYF9dq@rabbitmq:5672//
+    depends_on:
+      - webapp
+      - rabbitmq
+      - db
+
+  rabbitmq:
+    image: 'bitnami/rabbitmq:3.9'  # in the absence of "build:" this option will pull the image
+    environment:
+      - RABBITMQ_USERNAME=user
+      - RABBITMQ_PASSWORD=PwWYF9dq
+
+  db:
+    build:
+      context: .
+      dockerfile: Dockerfile-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD: Rovei%Z3
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - lindep-db:/var/lib/postgresql/data
+
+volumes:
+  lindep-db:
