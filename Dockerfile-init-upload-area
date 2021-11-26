@@ -1,0 +1,4 @@
+# https://serverfault.com/questions/984578/change-permissions-for-named-volumes-in-docker
+
+FROM busybox
+CMD ["sh", "-c", "mkdir -p $UPLOAD_AREA && chmod 777 $UPLOAD_AREA"]

@@ -8,7 +8,7 @@ import json
 from flask import Flask, request, g
 import psycopg2
 
-from .tasks import find_lindep_csv, JS_RUNNING, JS_DONE
+from .tasks import find_lindep_csv, JS_RUNNING, JS_DONE, upload_file_name
 
 
 #------------------------------------------------------------------------------
@@ -44,19 +44,27 @@ def index():
 
 def api_upload_csv():
     "View function."
-    query = """
-    --sql
-    insert into jobs (status) values ('new') returning id;
-    """
     try:
+        # Insert new job into database, get job_id.
+        query = """
+        --sql
+        insert into jobs (status) values ('new') returning id;
+        """
         with get_db() as conn:
             with conn.cursor() as cur:
                 cur.execute(query)
                 row = cur.fetchone()
                 job_id = row[0]
 
-        csv_text = request.stream.read().decode('utf-8')
-        find_lindep_csv.delay(csv_text, job_id)
+        # Read data from the input request stream and write them to a temp. file
+        datafile = os.path.join(os.environ['UPLOAD_AREA'], upload_file_name(job_id))
+        with open(datafile, 'bw') as f:
+            while not request.stream.is_exhausted:
+                chunk = request.stream.read(1024 * 1024)
+                f.write(chunk)
+
+        # Run Celery task
+        find_lindep_csv.delay(job_id)
         result = {'id': job_id}
 
     except Exception as e:

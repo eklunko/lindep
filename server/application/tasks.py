@@ -1,5 +1,4 @@
 import os
-from io import StringIO
 import json
 
 import psycopg2
@@ -15,6 +14,11 @@ JS_NEW = 'new'
 JS_RUNNING = 'running'
 JS_DONE = 'done'
 JS_ERROR = 'error'
+
+
+def upload_file_name(job_id):
+    "Create a name for the file being uploaded."
+    return f'{job_id}.csv'
 
 
 def update_job_status(job_id, status, result=''):
@@ -38,35 +42,39 @@ def update_job_status(job_id, status, result=''):
 
 
 @celapp.task(name='tasks.find_lindep_csv', acks_late=True)
-def find_lindep_csv(csv_text, job_id):
+def find_lindep_csv(job_id):
     """
     Celery task to process text from .csv file.
     """
-    update_job_status(job_id, JS_RUNNING)
     try:
-        result = find_lindep_csv_int(csv_text)
+        update_job_status(job_id, JS_RUNNING)
+
+        # Expected file format:
+        # "","col0","col1",...,"colN"
+        # "2020-04-13 00:00:00+00:00","0.9166","0.0022",...,"0.6983"
+        # "2020-04-13 01:00:00+00:00","0.1147","0.0912",...,"0.3672"
+        # ...
+        csv_file = os.path.join(os.environ['UPLOAD_AREA'], upload_file_name(job_id))
+        df = pd.read_csv(csv_file)
+
+        col_names = find_lindep(df)
 
     except Exception as e:
         print(f'job #{job_id} error: {e}')
         update_job_status(job_id, JS_ERROR, result=str(e))
 
     else:
-        update_job_status(job_id, JS_DONE, json.dumps(result))
-        print(f"job #{job_id} complete: {' '.join(result)}")
+        update_job_status(job_id, JS_DONE, json.dumps(col_names))
+        print(f"job #{job_id} complete: [{', '.join(col_names)}]")
+
+    finally:
+        os.remove(csv_file)
 
 
-def find_lindep_csv_int(csv_text):
+def find_lindep(df):
     """
-    Process text from .csv file - find linearly dependent columns.
+    Process dataframe - find linearly dependent columns.
     """
-    df = pd.read_csv(StringIO(csv_text))
-
-    # Expected file format:
-    # "","col0","col1",...,"colN"
-    # "2020-04-13 00:00:00+00:00","0.9166","0.0022",...,"0.6983"
-    # "2020-04-13 01:00:00+00:00","0.1147","0.0912",...,"0.3672"
-    # ...
-
     # Drop first column (date-time string)
     df = df.iloc[:, 1:]
 
