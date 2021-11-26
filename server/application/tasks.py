@@ -41,7 +41,7 @@ def update_job_status(job_id, status, result=''):
             conn.close()
 
 
-@celapp.task(name='tasks.find_lindep_csv', acks_late=True)
+@celapp.task(name='tasks.find_lindep_csv')
 def find_lindep_csv(job_id):
     """
     Celery task to process text from .csv file.
@@ -56,16 +56,17 @@ def find_lindep_csv(job_id):
         # ...
         csv_file = os.path.join(os.environ['UPLOAD_AREA'], upload_file_name(job_id))
         df = pd.read_csv(csv_file)
+        print(f'job #{job_id}: file loaded: {df.shape}')
 
         col_names = find_lindep(df)
 
     except Exception as e:
-        print(f'job #{job_id} error: {e}')
+        print(f'job #{job_id}: error: {e}')
         update_job_status(job_id, JS_ERROR, result=str(e))
 
     else:
         update_job_status(job_id, JS_DONE, json.dumps(col_names))
-        print(f"job #{job_id} complete: [{', '.join(col_names)}]")
+        print(f"job #{job_id}: complete: [{', '.join(col_names)}]")
 
     finally:
         os.remove(csv_file)
